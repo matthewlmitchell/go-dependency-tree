@@ -18,7 +18,7 @@ var (
 	ErrNoMatchesFound    = errors.New("no matches found")
 	ErrNoSubgroupsFound  = errors.New("no subgroups found")
 	regPkgImports        = regexp.MustCompile(`import \((?P<pkgNames>[^)]*)\)`)
-	regPkgName           = regexp.MustCompile(`package (?P<projPkgName>.*)`)
+	regPkgName           = regexp.MustCompile(`(?m)^package\s(?P<projPkgName>\S+)`)
 )
 
 func regexpStringSubmatchGroups(re *regexp.Regexp, input *string) (map[string]string, error) {
@@ -91,6 +91,7 @@ func parseGoMod(input *string) (string, error) {
 
 	regexMatches, err := regexpStringSubmatchGroups(re, input)
 	if err != nil {
+		fmt.Println(*input)
 		return "", ErrNoModuleNameFound
 	}
 
@@ -100,7 +101,7 @@ func parseGoMod(input *string) (string, error) {
 func readAndParseFileString(path string, linesToRead int32,
 	parserFunc func(*string) (string, error)) (string, error) {
 
-	fileContents, err := readFileToString(path, linesToRead)
+	fileContents, err := readPkgImportsToString(path, linesToRead)
 	if err != nil {
 		return "", err
 	}
@@ -117,10 +118,12 @@ func readAndParseFileString(path string, linesToRead int32,
 func readAndParseFileArray(path string, linesToRead int32,
 	parserFunc func(*string) ([]string, error)) ([]string, error) {
 
-	fileContents, err := readFileToString(path, linesToRead)
+	fileContents, err := readPkgImportsToString(path, linesToRead)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println(*fileContents)
 
 	value, err := parserFunc(fileContents)
 	if err != nil {
@@ -130,7 +133,7 @@ func readAndParseFileArray(path string, linesToRead int32,
 	return value, nil
 }
 
-func readFileToString(path string, lineReadLimit int32) (*string, error) {
+func readPkgImportsToString(path string, lineReadLimit int32) (*string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -149,14 +152,57 @@ func readFileToString(path string, lineReadLimit int32) (*string, error) {
 	scanner := bufio.NewScanner(file)
 
 	var output string
+	var currentLine string
+	ignoreLine := false
+	foundImportBlock := false
+
 	var i int32 = 0
 	for scanner.Scan() {
-		output += fmt.Sprintf("%s\n", scanner.Text())
+		currentLine = scanner.Text()
+
+		// If we find a multi-line comment that doesnt start with "/*",
+		// save the line then skip the next ones until we find "*/"
+		if strings.Contains(currentLine, "/*") &&
+			!strings.Contains(currentLine, "*/") {
+			if !strings.HasPrefix(currentLine, "/*") {
+				output += fmt.Sprintf("%s\n", scanner.Text())
+				i++
+				ignoreLine = true
+				continue
+			}
+
+			// When the multi-line comment starts with "/*",
+			// ignore the entire line
+			ignoreLine = true
+		} else if strings.HasPrefix(currentLine, "//") {
+			// If the line is a single-line comment, skip the entire line
+			continue
+		} else if ignoreLine && strings.Contains(currentLine, "*/") {
+			// If we find the end of the multi-line comment, skip the line
+			// and dont ignore the next one
+			ignoreLine = false
+			continue
+		} else if !ignoreLine && strings.HasPrefix(currentLine, "import (") {
+			// If we find the beginning of a multi-line import block that is not
+			// on an ignored line
+			foundImportBlock = true
+		} else if !ignoreLine && foundImportBlock &&
+			strings.TrimSpace(currentLine) == ")" {
+			// If we are in an import block and we find a line only containing
+			// the ending delimiter ")", add the line and exit
+			i = lineReadLimit + 1
+		} else if !ignoreLine && strings.HasPrefix(currentLine, "import \"") {
+			i = lineReadLimit + 1
+		}
+
+		if !ignoreLine {
+			output += fmt.Sprintf("%s\n", scanner.Text())
+			i++
+		}
+
 		if i > lineReadLimit {
 			break
 		}
-
-		i++
 
 	}
 
