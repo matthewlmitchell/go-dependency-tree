@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -32,24 +31,18 @@ func main() {
 		panic(err)
 	}
 
-	_, err = readAndParseFileArray(pt.filePaths["main.go"], 50, parseGoDependencies)
-	if err != nil {
-		panic(err)
-	}
-
-	// pkgList maps a filename to a []string of the form:
-	//   fileName: [filePackageName, importedPackages . . .]
-	pkgList := make(map[string][]string, len(pt.filePaths))
+	// pkgList maps a filename to a [][]string of the form:
+	//   filePackageName: [[fileName, importedPackages . . .] [fileName2, . . .]]
+	pkgList := make(map[string][][]string, len(pt.filePaths))
 	for name, path := range pt.filePaths {
-		pkgList[name], err = readAndParseFileArray(path, 500, parseGoDependencies)
+		deps, err := readAndParseFileArray(path, 200, parseGoDependencies)
+		name, deps[0] = deps[0], name
+		pkgList[name] = append(pkgList[name], deps)
+
 		if err != nil {
-			fmt.Errorf("err: %s", path)
 			panic(err)
 		}
 	}
 
-	for name, elem := range pkgList {
-		fmt.Printf("%s: %q \n", name, elem)
-	}
-
+	printToGraph(pkgList)
 }

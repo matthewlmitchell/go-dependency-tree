@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -66,7 +65,6 @@ func parseGoDependencies(input *string) ([]string, error) {
 	if err == ErrNoMatchesFound {
 		return []string{projPkgName}, nil
 	} else if err != nil {
-		fmt.Printf("%v", err)
 		return nil, err
 	}
 
@@ -91,7 +89,6 @@ func parseGoMod(input *string) (string, error) {
 
 	regexMatches, err := regexpStringSubmatchGroups(re, input)
 	if err != nil {
-		fmt.Println(*input)
 		return "", ErrNoModuleNameFound
 	}
 
@@ -123,7 +120,7 @@ func readAndParseFileArray(path string, linesToRead int32,
 		return nil, err
 	}
 
-	fmt.Println(*fileContents)
+	// fmt.Println(*fileContents)
 
 	value, err := parserFunc(fileContents)
 	if err != nil {
@@ -146,7 +143,7 @@ func readPkgImportsToString(path string, lineReadLimit int32) (*string, error) {
 	}
 
 	if fileStats.Size() > 10_000_000 {
-		log.Printf("WARNING: File %s is really large (size = %d), reading first %d lines", path, fileStats.Size(), lineReadLimit)
+		fmt.Printf("WARNING: File %s is really large (size = %d), reading first %d lines", path, fileStats.Size(), lineReadLimit)
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -159,6 +156,10 @@ func readPkgImportsToString(path string, lineReadLimit int32) (*string, error) {
 	var i int32 = 0
 	for scanner.Scan() {
 		currentLine = scanner.Text()
+
+		// Remove trailing and leading whitespace so we can properly detect
+		// comments in indented code blocks
+		currentLine = strings.TrimSpace(currentLine)
 
 		// If we find a multi-line comment that doesnt start with "/*",
 		// save the line then skip the next ones until we find "*/"
