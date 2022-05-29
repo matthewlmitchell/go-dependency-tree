@@ -9,7 +9,8 @@ func printToGraph(pkgList map[string][][]string) {
 	fmt.Println("\tfontname=\"Helvetica,Arial,sans-serif\"")
 	fmt.Println("\tnode [fontName=\"Helvetica,Arial,sans-serif\"]")
 	fmt.Println("\tedge [fontName=\"Helvetica,Arial,sans-serif\"]")
-	fmt.Println("\tnode [shape=box];")
+
+	fmt.Println("\t\"main\"")
 
 	for name, elem := range pkgList {
 
